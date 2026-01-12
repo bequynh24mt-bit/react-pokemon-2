@@ -1,0 +1,243 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pokemon Classic RPG - Remastered</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Press+Start+2P&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .font-pixel { font-family: 'Press Start 2P', monospace; }
+        .pixelated { image-rendering: pixelated; }
+        
+        @keyframes float-enemy { 
+            0%, 100% { transform: translateY(0); } 
+            50% { transform: translateY(-6px); } 
+        }
+        
+        @keyframes float-player {
+            0%, 100% { transform: translateY(0) scaleX(-1); }
+            50% { transform: translateY(-6px) scaleX(-1); }
+        }
+        
+        .shadow-oval {
+            width: 70%;
+            height: 12px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 50%;
+            transform: scaleY(0.5);
+            filter: blur(4px);
+            animation: shadow-breath 3s infinite ease-in-out;
+            position: absolute;
+            bottom: 15px;
+            z-index: 6;
+        }
+        @keyframes shadow-breath {
+            0%, 100% { transform: scale(1, 0.5); opacity: 0.4; }
+            50% { transform: scale(0.9, 0.5); opacity: 0.3; }
+        }
+
+        .animate-float-enemy { animation: float-enemy 3s ease-in-out infinite; }
+        .animate-float-player { animation: float-player 3s ease-in-out infinite; }
+        
+        .battle-platform {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 50%;
+            z-index: 5;
+            background-color: #65a30d;
+            background-image: 
+                linear-gradient(45deg, #4d7c0f 25%, transparent 25%, transparent 75%, #4d7c0f 75%),
+                linear-gradient(45deg, #4d7c0f 25%, transparent 25%, transparent 75%, #4d7c0f 75%);
+            background-position: 0 0, 4px 4px;
+            background-size: 8px 8px;
+            box-shadow: 
+                inset 0 0 20px rgba(0,0,0,0.6),
+                0 6px 0 #365314,
+                0 20px 30px rgba(0,0,0,0.5);
+            border: 3px solid #365314;
+        }
+
+        .enemy-platform { width: 140%; height: 40px; bottom: 5px; }
+        .player-platform { width: 160%; height: 50px; bottom: -5px; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 10px; }
+        
+        @keyframes throw-ball-curve {
+            0% { transform: translate(-300px, 300px) scale(0.5) rotate(0deg); opacity: 0; }
+            20% { opacity: 1; }
+            50% { transform: translate(-100px, -150px) scale(1.2) rotate(360deg); }
+            100% { transform: translate(0, 0) scale(1) rotate(720deg); opacity: 1; }
+        }
+        .ball-animation { animation: throw-ball-curve 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+
+        @keyframes ball-shake-hard {
+            0%, 100% { transform: rotate(0deg) translate(0, 0); }
+            15% { transform: rotate(-25deg) translate(-5px, 0); }
+            30% { transform: rotate(25deg) translate(5px, 0); }
+            45% { transform: rotate(-15deg) translate(-3px, 0); }
+            60% { transform: rotate(15deg) translate(3px, 0); }
+            75% { transform: rotate(0deg); }
+        }
+        .ball-shake { animation: ball-shake-hard 0.6s ease-in-out; }
+
+        .grass-tile { 
+            background-color: #65a30d; 
+            background-image: 
+                linear-gradient(45deg, #84cc16 25%, transparent 25%, transparent 75%, #84cc16 75%), 
+                linear-gradient(45deg, #84cc16 25%, transparent 25%, transparent 75%, #84cc16 75%);
+            background-position: 0 0, 2px 2px;
+            background-size: 4px 4px;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1); 
+            image-rendering: pixelated;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .grass-tile:nth-child(3n+1)::after {
+            content: ''; position: absolute; width: 4px; height: 4px;
+            background: #f87171; top: 20%; left: 20%; box-shadow: 2px 2px 0 #fca5a5;
+        }
+
+        .grass-tile:nth-child(5n+2)::after {
+            content: ''; position: absolute; width: 3px; height: 3px;
+            background: #facc15; bottom: 30%; right: 20%; box-shadow: -2px 2px 0 #fde047;
+        }
+        
+        .grass-tile:nth-child(7n)::after {
+            content: ''; position: absolute; width: 3px; height: 3px;
+            background: #fff; top: 50%; left: 50%; border-radius: 50%;
+        }
+
+        .path-tile { 
+            background-color: #e5e7eb; 
+            background-image: radial-gradient(#9ca3af 10%, transparent 11%);
+            background-size: 4px 4px;
+            border: 1px solid #d1d5db; 
+        }
+
+        .wall-tile { 
+            background: #1e293b; 
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5); 
+            border: 1px solid #334155; 
+            background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 2px, transparent 2px, transparent 4px);
+        }
+
+        .heal-tile { background-color: #fff; background-image: radial-gradient(#f87171 40%, transparent 40%); background-size: 100% 100%; border: 2px solid #fca5a5; }
+
+        .battle-bg {
+            background: radial-gradient(circle at 50% 120%, #1e293b 10%, #0f172a 40%, #020617 100%);
+            position: relative;
+        }
+        .battle-bg::before {
+            content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 40%;
+            background: linear-gradient(to top, rgba(16, 185, 129, 0.1), transparent);
+            pointer-events: none;
+        }
+        
+        .legendary-glow { filter: drop-shadow(0 0 20px rgba(251, 191, 36, 0.6)); }
+        .ace-border { border: 3px solid #fbbf24 !important; box-shadow: 0 0 10px rgba(251, 191, 36, 0.5); }
+        .ace-tag {
+            position: absolute; top: -8px; right: 8px;
+            background: linear-gradient(135deg, #fbbf24, #d97706);
+            color: #fff; font-size: 9px; font-weight: 900;
+            padding: 2px 6px; border-radius: 4px; z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-4px, 0, 0) rotate(-1deg); filter: brightness(2) sepia(1) hue-rotate(-50deg) saturate(5); }
+            20%, 80% { transform: translate3d(8px, 0, 0) rotate(2deg); }
+            30%, 50%, 70% { transform: translate3d(-8px, 0, 0) rotate(-2deg); }
+            40%, 60% { transform: translate3d(8px, 0, 0) rotate(1deg); }
+        }
+
+        .flash-red { animation: flashRed 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes flashRed { 
+            0% { background: rgba(255, 0, 0, 0.6); } 
+            100% { background: transparent; } 
+        }
+
+        .d-pad-btn {
+            width: 52px; height: 52px;
+            background: linear-gradient(to bottom, #475569, #334155);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            color: white;
+            box-shadow: 0 4px 0 #0f172a, 0 5px 10px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+        }
+        .d-pad-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #0f172a; }
+
+        .vs-container { background: #000; overflow: hidden; }
+        .vs-split-bg {
+            position: absolute; inset: -50%;
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 49%, #000 50%, #1e40af 51%, #3b82f6 100%);
+            animation: vs-bg-spin 3s ease-out forwards;
+        }
+        @keyframes vs-bg-spin { 0% { transform: rotate(15deg) scale(1.5); } 100% { transform: rotate(0deg) scale(1); } }
+
+        .vs-card-player { animation: slide-in-left 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .vs-card-enemy { animation: slide-in-right 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slide-in-left { from { transform: translateX(-120%) skewX(-20deg); opacity: 0; } to { transform: translateX(0) skewX(0); opacity: 1; } }
+        @keyframes slide-in-right { from { transform: translateX(120%) skewX(20deg); opacity: 0; } to { transform: translateX(0) skewX(0); opacity: 1; } }
+
+        .vs-text-container { animation: zoom-slam 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        @keyframes zoom-slam {
+            0% { transform: scale(3); opacity: 0; }
+            60% { transform: scale(0.9); opacity: 1; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .vs-glitch {
+            text-shadow: 2px 2px #ff0000, -2px -2px #0000ff;
+            animation: glitch-anim 0.2s infinite;
+        }
+        @keyframes glitch-anim {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+
+        .info-glass {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

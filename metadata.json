@@ -1,0 +1,5 @@
+{
+  "name": "Pokemon Classic RPG - Remastered",
+  "description": "A high-fidelity React port of the classic Pokemon RPG experience with animated sprites, battle systems, and map exploration.",
+  "requestFramePermissions": []
+}
