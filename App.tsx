@@ -3,10 +3,21 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { POKEMON_DB, MAP_DATA } from './constants';
 import { PokemonInstance, PokemonTemplate, GameState, LogEntry, Move } from './types';
 
-// Các hàm tiện ích giấu kín
+// Các hàm tiện ích giấu kín logic hệ thống
 const randInt = (a: number, b: number) => Math.floor(Math.random() * (b - a + 1)) + a;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const expNeeded = (level: number) => 50 + (level - 1) * 10;
+
+// Hàm bảo mật nội bộ để lấy tỉ lệ spawn mà không để lộ hằng số
+const _getSystemEntropy = () => {
+  try {
+    // Giấu tỉ lệ 12% (0.12) vào một chuỗi mã hóa và tính toán bitwise
+    const _s = atob("MC4xMjA5MTk5OQ=="); 
+    return parseFloat(_s) + (Math.sin(Date.now()) * 0.000001);
+  } catch {
+    return 0.1; 
+  }
+};
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>('start');
@@ -29,14 +40,22 @@ const App: React.FC = () => {
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // Cơ chế tự động dọn dẹp Console để ngăn soi mói logic qua F12
+  // Bảo vệ console khỏi việc bị debug thủ công
   useEffect(() => {
-    const clean = setInterval(() => {
-      if (window.console && window.console.clear) {
-        // window.console.clear(); // Bỏ comment nếu muốn xóa sạch console liên tục
+    const disableDevToolsTools = () => {
+      if (typeof window !== 'undefined') {
+        const _oldLog = console.log;
+        // Ghi đè các lệnh console nhạy cảm
+        console.log = () => {};
+        console.warn = () => {};
+        console.debug = () => {};
+        // Ngăn chặn việc truy cập biến qua console bằng cách clear liên tục
+        setInterval(() => {
+           // console.clear(); // Có thể bật nếu muốn cực đoan
+        }, 2000);
       }
-    }, 1500);
-    return () => clearInterval(clean);
+    };
+    disableDevToolsTools();
   }, []);
 
   const addLog = useCallback((msg: string, type: LogEntry['type'] = 'normal') => {
@@ -68,21 +87,15 @@ const App: React.FC = () => {
   const startBattle = useCallback(async () => {
     const maxPlayerLv = playerTeam.reduce((m, p) => Math.max(m, p.level), 1);
     
-    /** 
-     * LOGIC SPAWN BẢO MẬT: Giấu tỉ lệ spawn huyền thoại 
-     * Không sử dụng hằng số rõ ràng, sử dụng giải mã btoa và toán học để đánh lừa F12.
-     */
-    const _v1 = atob("MC4wOQ=="); // "0.09" - Tỉ lệ 9%
-    const _v2 = Math.sin(Date.now()) * 0.01; 
-    const _computedRate = parseFloat(_v1) + _v2; 
-    const isLegend = Math.random() < Math.max(0.05, _computedRate);
+    // LOGIC SPAWN BẢO MẬT: Sử dụng hàm giấu kín entropy
+    const isLegend = Math.random() < _getSystemEntropy();
     
     let t: PokemonTemplate;
     let enemyLevel: number;
 
     if (isLegend) {
       t = POKEMON_DB.legendary[Math.floor(Math.random() * POKEMON_DB.legendary.length)];
-      enemyLevel = maxPlayerLv + 10;
+      enemyLevel = maxPlayerLv + 5;
     } else {
       t = POKEMON_DB.wild[Math.floor(Math.random() * POKEMON_DB.wild.length)];
       const avgLv = Math.floor(playerTeam.reduce((acc, p) => acc + p.level, 0) / playerTeam.length);
@@ -213,31 +226,36 @@ const App: React.FC = () => {
     if (isBusy || mustSwitch || !enemy) return;
     setIsBusy(true);
     setPokeballAnim(true);
-    addLog("Đã ném Pokeball! Cố lên!", 'system');
+    addLog("Đã ném Pokeball! Cố lên...", 'system');
     await new Promise(r => setTimeout(r, 800));
     setPokeballAnim(false);
-    setEnemyFainted(true);
+    setEnemyFainted(true); // Tạm ẩn sprite pokemon khi đang ở trong bóng
+
+    // Lắc bóng 3 lần để tạo kịch tính
     for (let i = 0; i < 3; i++) {
       setPokeballShake(true);
       await new Promise(r => setTimeout(r, 800));
       setPokeballShake(false);
     }
-    const maxLv = playerTeam.reduce((m, p) => Math.max(m, p.level), 1);
+
     const hpRatio = enemy.currentHp / enemy.maxHp;
-    let rate;
+    let captureRate;
     if (enemy.isLegendary) {
-      rate = clamp((0.05 + Math.random() * 0.25) + (1 - hpRatio) * 0.30, 0.05, 0.60);
+      captureRate = clamp(0.1 + (1 - hpRatio) * 0.4, 0.05, 0.5);
     } else {
-      rate = clamp((enemy.level < maxLv ? 0.80 : 0.75) + (1 - hpRatio) * 0.15, 0.10, 0.95);
+      captureRate = clamp(0.6 + (1 - hpRatio) * 0.3, 0.3, 0.95);
     }
-    if (Math.random() < rate) {
-      addLog(`Gotcha! ${enemy.name} đã bị thu phục!`, 'system');
+
+    if (Math.random() < captureRate) {
+      // THÀNH CÔNG BẮT ĐƯỢC
+      addLog(`✨ TUYỆT VỜI! Đã thu phục được ${enemy.name}!`, 'system');
       setShowToast(true);
-      setPlayerTeam(prev => [...prev, { ...enemy, currentHp: enemy.maxHp }]);
-      setTimeout(() => setShowToast(false), 1500);
-      setTimeout(() => endBattle(false), 1200);
+      setPlayerTeam(prev => [...prev, { ...enemy, currentHp: enemy.maxHp, uid: Math.random() }]);
+      setTimeout(() => setShowToast(false), 2000);
+      setTimeout(() => endBattle(false), 1500);
     } else {
-      addLog(`Không xong rồi! Nó thoát ra mất!`, 'system');
+      // THẤT BẠI
+      addLog(`Ôi không! ${enemy.name} đã thoát ra!`, 'system');
       setEnemyFainted(false);
       await enemyTurn(enemy, playerTeam[activeIdx]);
       setIsBusy(false);
@@ -250,7 +268,7 @@ const App: React.FC = () => {
     setIsBusy(true);
     addLog("Đang cố gắng chạy trốn...", 'system');
     await new Promise(r => setTimeout(r, 500));
-    if (Math.random() < (enemy.isLegendary ? 0.50 : 0.80)) {
+    if (Math.random() < (enemy.isLegendary ? 0.30 : 0.80)) {
       addLog("Chạy trốn thành công!", 'system');
       setTimeout(() => endBattle(false), 600);
     } else {
@@ -279,6 +297,13 @@ const App: React.FC = () => {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
+      {/* TOAST THÀNH CÔNG */}
+      {showToast && (
+        <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[300] bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black shadow-[0_0_30px_rgba(16,185,129,0.8)] animate-bounce border-2 border-white">
+          ✨ ĐÃ THU PHỤC THÀNH CÔNG! ✨
+        </div>
+      )}
+
       {/* START SCREEN */}
       {gameState === 'start' && (
         <div className="min-h-screen flex flex-col items-center justify-center text-white p-6 bg-slate-900 relative overflow-hidden">
@@ -388,6 +413,7 @@ const App: React.FC = () => {
               <div className="w-32 h-32 sm:w-48 sm:h-48 flex flex-col items-center justify-end relative mr-8">
                 <img src={enemy.img} className={`w-full h-full object-contain pixelated animate-float-enemy drop-shadow-2xl relative z-10 ${enemy.isLegendary ? 'legendary-glow' : ''} ${enemyShaking ? 'shake' : ''}`} style={{ opacity: enemyFainted ? 0 : 1, transform: enemyFainted ? 'scale(0.1) translateY(50px)' : 'none', transition: 'all 0.6s' }} />
                 <div className="shadow-oval"></div>
+                {/* POKEBALL ANIMATION LAYER */}
                 <div className={`absolute inset-0 -top-20 flex items-center justify-center z-50 pointer-events-none ${pokeballAnim ? 'ball-animation' : 'hidden'}`}>
                   <svg className={`w-10 h-10 drop-shadow-xl ${pokeballShake ? 'ball-shake' : ''}`} viewBox="0 0 100 100">
                     <circle cx="50" cy="50" r="48" fill="white" stroke="#1e293b" strokeWidth="4"/>
@@ -396,6 +422,16 @@ const App: React.FC = () => {
                     <circle cx="50" cy="50" r="10" fill="white" stroke="#9ca3af" strokeWidth="1"/>
                   </svg>
                 </div>
+                {/* LẮC BÓNG TRÊN MẶT ĐẤT KHI ĐÃ NÉM */}
+                {!pokeballAnim && isBusy && !enemyFainted && pokeballShake && (
+                   <div className="absolute bottom-4 flex items-center justify-center z-50">
+                    <svg className="w-10 h-10 ball-shake" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="48" fill="white" stroke="#1e293b" strokeWidth="4"/>
+                      <path d="M2 50 A 48 48 0 0 1 98 50 L 2 50" fill="#ef4444" stroke="#1e293b" strokeWidth="2"/>
+                      <circle cx="50" cy="50" r="14" fill="white" stroke="#1e293b" strokeWidth="5"/>
+                    </svg>
+                   </div>
+                )}
               </div>
             </div>
             {/* PLAYER */}
