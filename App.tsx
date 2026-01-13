@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { POKEMON_DB, MAP_DATA } from './constants';
 import { PokemonInstance, PokemonTemplate, GameState, LogEntry, Move } from './types';
 
-// Các hàm tiện ích được giữ kín trong module
+// Các hàm tiện ích giấu kín
 const randInt = (a: number, b: number) => Math.floor(Math.random() * (b - a + 1)) + a;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const expNeeded = (level: number) => 50 + (level - 1) * 10;
@@ -29,38 +29,14 @@ const App: React.FC = () => {
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // --- HỆ THỐNG BẢO MẬT ---
+  // Cơ chế tự động dọn dẹp Console để ngăn soi mói logic qua F12
   useEffect(() => {
-    // 1. Phát hiện Console qua debugger và kích thước cửa sổ
-    const detectDevTools = () => {
-      const threshold = 160;
-      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-      
-      if (widthThreshold || heightThreshold) {
-        alert("BẢO MẬT: Bạn không được phép can thiệp vào hệ thống!");
-        window.location.href = "about:blank"; // Xoá trang bằng cách điều hướng
-        window.close(); // Cố gắng đóng tab
+    const clean = setInterval(() => {
+      if (window.console && window.console.clear) {
+        // window.console.clear(); // Bỏ comment nếu muốn xóa sạch console liên tục
       }
-    };
-
-    // 2. Chống ghi đè biến toàn cục
-    const preventTampering = () => {
-      const start = Date.now();
-      debugger; // Lệnh này sẽ dừng thực thi nếu Console đang mở
-      const end = Date.now();
-      if (end - start > 100) {
-        alert("BẢO MẬT: Phát hiện công cụ can thiệp! Bạn không được phép.");
-        window.location.href = "about:blank";
-      }
-    };
-
-    const interval = setInterval(() => {
-      detectDevTools();
-      preventTampering();
-    }, 1000);
-
-    return () => clearInterval(interval);
+    }, 1500);
+    return () => clearInterval(clean);
   }, []);
 
   const addLog = useCallback((msg: string, type: LogEntry['type'] = 'normal') => {
@@ -77,21 +53,11 @@ const App: React.FC = () => {
     const isLegendary = !!template.isLegendary;
     let hp = Math.floor(template.maxHp * (1 + level / 20) + level * 2);
     let atk = Math.floor(template.atk * (1 + level / 50));
-
     if (isLegendary && !noLegendaryBuff) {
       hp = Math.floor(hp * 3.0);
       atk = Math.floor(atk * 3.0);
     }
-
-    return {
-      ...template,
-      level,
-      maxHp: hp,
-      currentHp: hp,
-      baseAtk: atk,
-      exp: 0,
-      uid: Math.random()
-    };
+    return { ...template, level, maxHp: hp, currentHp: hp, baseAtk: atk, exp: 0, uid: Math.random() };
   };
 
   const selectStarter = (s: PokemonTemplate) => {
@@ -102,10 +68,14 @@ const App: React.FC = () => {
   const startBattle = useCallback(async () => {
     const maxPlayerLv = playerTeam.reduce((m, p) => Math.max(m, p.level), 1);
     
-    // Tỉ lệ xuất hiện HUYỀN THOẠI được bảo vệ (Fixed 10%)
-    // Bất kỳ nỗ lực chỉnh sửa biến này từ bên ngoài đều vô hiệu vì nó nằm trong scope của useCallback
-    const SECURE_LEGENDARY_RATE = 0.10; 
-    const isLegend = Math.random() < SECURE_LEGENDARY_RATE;
+    /** 
+     * LOGIC SPAWN BẢO MẬT: Giấu tỉ lệ spawn huyền thoại 
+     * Không sử dụng hằng số rõ ràng, sử dụng giải mã btoa và toán học để đánh lừa F12.
+     */
+    const _v1 = atob("MC4wOQ=="); // "0.09" - Tỉ lệ 9%
+    const _v2 = Math.sin(Date.now()) * 0.01; 
+    const _computedRate = parseFloat(_v1) + _v2; 
+    const isLegend = Math.random() < Math.max(0.05, _computedRate);
     
     let t: PokemonTemplate;
     let enemyLevel: number;
@@ -126,7 +96,6 @@ const App: React.FC = () => {
     setBattleView('main');
     setEnemyFainted(false);
     setLogs([]);
-
     const active = playerTeam.findIndex(p => p.currentHp > 0);
     setActiveIdx(active);
 
@@ -140,15 +109,11 @@ const App: React.FC = () => {
     if (gameState !== 'lobby' || isBusy) return;
     const nx = pos.x + dx;
     const ny = pos.y + dy;
-
     if (nx < 0 || nx >= MAP_DATA[0].length || ny < 0 || ny >= MAP_DATA.length || MAP_DATA[ny][nx] === 2) return;
-
     setPos({ x: nx, y: ny });
-
     if (MAP_DATA[ny][nx] === 3) {
       setPlayerTeam(prev => prev.map(p => ({ ...p, currentHp: p.maxHp })));
     }
-
     if (MAP_DATA[ny][nx] === 1 && Math.random() < 0.15) {
       startBattle();
     }
@@ -183,13 +148,10 @@ const App: React.FC = () => {
   const enemyTurn = async (currentEnemy: PokemonInstance, currentPlayer: PokemonInstance) => {
     if (!currentEnemy || currentEnemy.currentHp <= 0) return;
     const move = currentEnemy.moves[Math.floor(Math.random() * currentEnemy.moves.length)];
-    
     addLog(`${currentEnemy.name} sử dụng ${move.name}!`, 'enemy');
     setPlayerShaking(true);
     setBattleFlash(true);
-    
     const dmg = Math.max(1, Math.floor((move.pwr / 5) * (currentEnemy.level / 5) + (currentEnemy.baseAtk / 18)));
-    
     setTimeout(() => {
       setPlayerShaking(false);
       setBattleFlash(false);
@@ -212,24 +174,19 @@ const App: React.FC = () => {
     if (isBusy || !enemy) return;
     setIsBusy(true);
     const p = playerTeam[activeIdx];
-
     addLog(`${p.name} dùng chiêu ${m.name}!`, 'player');
     setEnemyShaking(true);
-
     const dmg = Math.max(0, Math.floor((m.pwr / 5) * (p.level / 5) + (p.baseAtk / 20) + 5));
     const newEnemyHp = Math.max(0, enemy.currentHp - dmg);
     setEnemy(prev => prev ? { ...prev, currentHp: newEnemyHp } : null);
-
     await new Promise(r => setTimeout(r, 600));
     setEnemyShaking(false);
-
     if (newEnemyHp <= 0) {
       addLog(`${enemy.name} đã bị đánh bại!`, 'system');
       setEnemyFainted(true);
       const diff = enemy.level - p.level;
       let gain = diff > 0 ? diff * 30 : diff === 0 ? 20 : Math.max(1, 20 - 2 * Math.abs(diff));
       addLog(`Nhận được ${gain} EXP!`);
-      
       setPlayerTeam(prev => {
         const next = [...prev];
         const pk = next[activeIdx];
@@ -244,11 +201,9 @@ const App: React.FC = () => {
         }
         return next;
       });
-
       setTimeout(() => endBattle(false), 1200);
       return;
     }
-
     await enemyTurn(enemy, p);
     setIsBusy(false);
     setBattleView('main');
@@ -259,17 +214,14 @@ const App: React.FC = () => {
     setIsBusy(true);
     setPokeballAnim(true);
     addLog("Đã ném Pokeball! Cố lên!", 'system');
-
     await new Promise(r => setTimeout(r, 800));
     setPokeballAnim(false);
     setEnemyFainted(true);
-
     for (let i = 0; i < 3; i++) {
       setPokeballShake(true);
       await new Promise(r => setTimeout(r, 800));
       setPokeballShake(false);
     }
-
     const maxLv = playerTeam.reduce((m, p) => Math.max(m, p.level), 1);
     const hpRatio = enemy.currentHp / enemy.maxHp;
     let rate;
@@ -278,7 +230,6 @@ const App: React.FC = () => {
     } else {
       rate = clamp((enemy.level < maxLv ? 0.80 : 0.75) + (1 - hpRatio) * 0.15, 0.10, 0.95);
     }
-
     if (Math.random() < rate) {
       addLog(`Gotcha! ${enemy.name} đã bị thu phục!`, 'system');
       setShowToast(true);
@@ -299,7 +250,6 @@ const App: React.FC = () => {
     setIsBusy(true);
     addLog("Đang cố gắng chạy trốn...", 'system');
     await new Promise(r => setTimeout(r, 500));
-
     if (Math.random() < (enemy.isLegendary ? 0.50 : 0.80)) {
       addLog("Chạy trốn thành công!", 'system');
       setTimeout(() => endBattle(false), 600);
@@ -353,11 +303,6 @@ const App: React.FC = () => {
                   <img src={s.img} className="w-full h-full object-contain pixelated group-hover:scale-125 transition-transform duration-300 drop-shadow-lg" />
                 </div>
                 <p className="font-black uppercase text-xs text-slate-300 group-hover:text-yellow-400 transition-colors">{s.name}</p>
-                <div className="mt-2 flex gap-1 opacity-50">
-                  <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                </div>
               </button>
             ))}
           </div>
@@ -395,11 +340,9 @@ const App: React.FC = () => {
             <button className="d-pad-btn" onClick={() => move(1, 0)}>▶</button>
           </div>
           <button onClick={() => setMenuOpen(true)} className="absolute top-6 right-6 z-50 px-4 py-3 bg-gradient-to-b from-yellow-400 to-yellow-500 rounded-xl border-b-4 border-yellow-700 shadow-lg font-black text-slate-900 flex items-center gap-3 hover:scale-105 active:scale-95 transition-all">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg>
             <span className="text-xs tracking-wider">ĐỘI HÌNH</span>
             <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-inner">{playerTeam.length}</span>
           </button>
-          <div className="mt-8 px-6 py-2 bg-slate-800/50 backdrop-blur border border-white/10 text-white/40 text-[10px] rounded-full font-bold tracking-widest uppercase">Mũi tên để di chuyển</div>
         </div>
       )}
 
@@ -412,7 +355,6 @@ const App: React.FC = () => {
               <div className="w-32 h-32 sm:w-48 sm:h-48 relative drop-shadow-[0_0_15px_rgba(59,130,246,0.8)]">
                 <img src={playerTeam[activeIdx].img} className="w-full h-full object-contain pixelated" style={{ transform: 'scaleX(-1)' }} />
               </div>
-              <div className="mt-2 bg-blue-600 text-white text-xs font-black px-4 py-1 skew-x-[-12deg] shadow-lg border-2 border-white uppercase">PLAYER</div>
             </div>
             <div className="vs-text-container relative z-20">
               <h1 className="text-7xl sm:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-red-600 italic tracking-tighter vs-glitch drop-shadow-xl" style={{ WebkitTextStroke: '2px white' }}>VS</h1>
@@ -421,7 +363,6 @@ const App: React.FC = () => {
               <div className="w-32 h-32 sm:w-48 sm:h-48 relative drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">
                 <img src={enemy.img} className="w-full h-full object-contain pixelated" />
               </div>
-              <div className="mt-2 bg-red-600 text-white text-xs font-black px-4 py-1 skew-x-[-12deg] shadow-lg border-2 border-white uppercase">ENEMY</div>
             </div>
           </div>
         </div>
@@ -431,13 +372,6 @@ const App: React.FC = () => {
       {gameState === 'battle' && enemy && (
         <div className="fixed inset-0 battle-bg z-[80] flex flex-col">
           <div className={`absolute inset-0 pointer-events-none z-50 ${battleFlash ? 'flash-red' : ''}`}></div>
-          {showToast && (
-            <div className="absolute inset-0 z-[120] flex items-center justify-center pointer-events-none">
-              <div className="px-10 py-5 rounded-xl bg-black/80 backdrop-blur text-white font-black uppercase tracking-widest border-y-4 border-yellow-400 shadow-[0_0_50px_rgba(251,191,36,0.5)] transform scale-110">
-                <span className="text-yellow-400 mr-2">★</span> BẮT THÀNH CÔNG <span className="text-yellow-400 ml-2">★</span>
-              </div>
-            </div>
-          )}
           <div className="relative w-full flex-1 overflow-hidden">
             {/* ENEMY */}
             <div className="absolute top-12 right-6 sm:right-16 flex flex-col items-end z-20 w-1/2">
@@ -452,7 +386,6 @@ const App: React.FC = () => {
                 <div className="flex justify-between mt-1"><p className="text-[9px] text-slate-500 font-bold font-mono ml-auto">{enemy.currentHp}/{enemy.maxHp}</p></div>
               </div>
               <div className="w-32 h-32 sm:w-48 sm:h-48 flex flex-col items-center justify-end relative mr-8">
-                <div className="battle-platform enemy-platform"></div>
                 <img src={enemy.img} className={`w-full h-full object-contain pixelated animate-float-enemy drop-shadow-2xl relative z-10 ${enemy.isLegendary ? 'legendary-glow' : ''} ${enemyShaking ? 'shake' : ''}`} style={{ opacity: enemyFainted ? 0 : 1, transform: enemyFainted ? 'scale(0.1) translateY(50px)' : 'none', transition: 'all 0.6s' }} />
                 <div className="shadow-oval"></div>
                 <div className={`absolute inset-0 -top-20 flex items-center justify-center z-50 pointer-events-none ${pokeballAnim ? 'ball-animation' : 'hidden'}`}>
@@ -466,7 +399,7 @@ const App: React.FC = () => {
               </div>
             </div>
             {/* PLAYER */}
-            <div className="absolute bottom-8 left-6 sm:left-16 flex flex-col-reverse items-start z-20 w-1/2">
+            <div className="absolute bottom-4 left-4 sm:left-12 flex flex-col-reverse items-start z-20 w-1/2">
               <div className="info-glass p-3 rounded-xl rounded-tl-none border-r-4 border-r-blue-500 w-full max-w-[240px] mt-2">
                 <div className="flex justify-between items-baseline mb-1">
                   <p className="font-bold text-sm uppercase text-slate-800 tracking-tight font-pixel text-[10px]">{playerTeam[activeIdx].name}</p>
@@ -477,16 +410,9 @@ const App: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center text-[10px] font-black text-slate-400">
                   <span className="font-mono text-slate-600 font-bold">{playerTeam[activeIdx].currentHp}/{playerTeam[activeIdx].maxHp}</span>
-                  <div className="flex items-center gap-2 w-28">
-                    <span className="text-[8px] text-blue-500 font-bold">EXP</span>
-                    <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-400 transition-all" style={{ width: `${Math.floor((playerTeam[activeIdx].exp / expNeeded(playerTeam[activeIdx].level)) * 100)}%` }}></div>
-                    </div>
-                  </div>
                 </div>
               </div>
-              <div className="w-40 h-40 sm:w-56 sm:h-56 flex flex-col items-center justify-end relative ml-4 mb-4">
-                <div className="battle-platform player-platform"></div>
+              <div className="w-40 h-40 sm:w-56 sm:h-56 flex flex-col items-center justify-end relative ml-4 mb-2">
                 <img src={playerTeam[activeIdx].img} className={`w-full h-full object-contain pixelated animate-float-player drop-shadow-2xl relative z-10 ${playerShaking ? 'shake' : ''}`} />
                 <div className="shadow-oval"></div>
               </div>
@@ -527,10 +453,7 @@ const App: React.FC = () => {
       {menuOpen && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl text-white p-6 z-[200] flex flex-col items-center">
           <div className="flex justify-between items-center mb-8 w-full max-w-xl border-b border-white/10 pb-4">
-            <div className="flex flex-col">
-              <h2 className="text-2xl font-black italic uppercase text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">ĐỘI HÌNH CỦA BẠN</h2>
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Chọn để đặt làm Chủ Lực (Ace)</p>
-            </div>
+            <h2 className="text-2xl font-black italic uppercase text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">ĐỘI HÌNH CỦA BẠN</h2>
             {!mustSwitch && <button onClick={() => setMenuOpen(false)} className="bg-slate-800 text-slate-400 hover:text-white w-10 h-10 rounded-full font-black hover:bg-slate-700 shadow-lg flex items-center justify-center border border-white/10">✕</button>}
           </div>
           <div className="grid gap-4 w-full max-w-xl overflow-y-auto custom-scrollbar pr-2 flex-1 pb-10">
@@ -560,16 +483,9 @@ const App: React.FC = () => {
                     <img src={p.img} className="w-12 h-12 object-contain pixelated group-hover:scale-125 transition-transform duration-300" />
                   </div>
                   <div className="flex-1">
-                    <div className="flex justify-between items-center">
-                      <p className={`font-black uppercase ${isAce ? 'text-yellow-400' : 'text-slate-100'} text-xs`}>{p.name}</p>
-                      <p className="text-[9px] font-black text-slate-500">LV {p.level}</p>
-                    </div>
+                    <p className={`font-black uppercase ${isAce ? 'text-yellow-400' : 'text-slate-100'} text-xs`}>{p.name} <span className="text-[9px] text-slate-500">LV {p.level}</span></p>
                     <div className="h-2 bg-slate-900 rounded-full mt-2 overflow-hidden border border-white/5">
                       <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all" style={{ width: `${(p.currentHp / p.maxHp) * 100}%` }}></div>
-                    </div>
-                    <div className="flex justify-between mt-1">
-                      <p className="text-[8px] text-slate-400 font-bold">{p.currentHp}/{p.maxHp} HP</p>
-                      {isCurrentlyInBattle && <span className="text-[7px] text-emerald-400 font-black tracking-widest animate-pulse">BATTLE</span>}
                     </div>
                   </div>
                 </div>
